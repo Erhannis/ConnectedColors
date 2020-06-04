@@ -4,21 +4,22 @@ class ColorSwitchViewController: UIViewController {
 
     @IBOutlet weak var connectionsLabel: UILabel!
 
-    let colorService = ColorService()
+    // Assuming iPad server and iPhone client
+    let colorRoot = UIDevice.current.model == "iPad" ? ColorServer() : ColorClient()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        colorService.delegate = self
+        colorRoot.delegate = self
     }
 
     @IBAction func redTapped() {
         self.change(color: .red)
-        colorService.send(colorName: "red")
+        colorRoot.send(colorName: "red")
     }
 
     @IBAction func yellowTapped() {
         self.change(color: .yellow)
-        colorService.send(colorName: "yellow")
+        colorRoot.send(colorName: "yellow")
     }
 
     func change(color : UIColor) {
@@ -29,15 +30,15 @@ class ColorSwitchViewController: UIViewController {
     
 }
 
-extension ColorSwitchViewController : ColorServiceDelegate {
+extension ColorSwitchViewController : ColorRootDelegate {
 
-    func connectedDevicesChanged(manager: ColorService, connectedDevices: [String]) {
+    func connectedDevicesChanged(manager: ColorRoot, connectedDevices: [String]) {
         OperationQueue.main.addOperation {
             self.connectionsLabel.text = "Connections: \(connectedDevices)"
         }
     }
 
-    func colorChanged(manager: ColorService, colorString: String) {
+    func colorChanged(manager: ColorRoot, colorString: String) {
         OperationQueue.main.addOperation {
             switch colorString {
             case "red":

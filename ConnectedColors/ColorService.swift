@@ -1,48 +1,30 @@
 import Foundation
 import MultipeerConnectivity
 
-protocol ColorServiceDelegate {
-
-    func connectedDevicesChanged(manager : ColorService, connectedDevices: [String])
-    func colorChanged(manager : ColorService, colorString: String)
-
+protocol ColorRootDelegate {
+    func connectedDevicesChanged(manager : ColorRoot, connectedDevices: [String])
+    func colorChanged(manager : ColorRoot, colorString: String)
 }
 
-class ColorService : NSObject {
+protocol ColorServerDelegate : ColorRootDelegate {
+}
 
+protocol ColorClientDelegate : ColorRootDelegate {
+}
+
+class ColorRoot : NSObject {
     // Service type must be a unique string, at most 15 characters long
     // and can contain only ASCII lowercase letters, numbers and hyphens.
-    private let ColorServiceType = "example-color"
+    fileprivate let ColorServiceType = "example-color"
 
-    private let myPeerId = MCPeerID(displayName: UIDevice.current.name)
-    private let serviceAdvertiser : MCNearbyServiceAdvertiser
-    private let serviceBrowser : MCNearbyServiceBrowser
-
-    var delegate : ColorServiceDelegate?
-
+    fileprivate let myPeerId = MCPeerID(displayName: UIDevice.current.name)
+    open var delegate : ColorRootDelegate?
+    
     lazy var session : MCSession = {
         let session = MCSession(peer: self.myPeerId, securityIdentity: nil, encryptionPreference: .required)
         session.delegate = self
         return session
     }()
-
-    override init() {
-        self.serviceAdvertiser = MCNearbyServiceAdvertiser(peer: myPeerId, discoveryInfo: nil, serviceType: ColorServiceType)
-        self.serviceBrowser = MCNearbyServiceBrowser(peer: myPeerId, serviceType: ColorServiceType)
-
-        super.init()
-
-        self.serviceAdvertiser.delegate = self
-        self.serviceAdvertiser.startAdvertisingPeer()
-
-        self.serviceBrowser.delegate = self
-        self.serviceBrowser.startBrowsingForPeers()
-    }
-
-    deinit {
-        self.serviceAdvertiser.stopAdvertisingPeer()
-        self.serviceBrowser.stopBrowsingForPeers()
-    }
 
     func send(colorName : String) {
         NSLog("%@", "sendColor: \(colorName) to \(session.connectedPeers.count) peers")
@@ -55,12 +37,44 @@ class ColorService : NSObject {
                 NSLog("%@", "Error for sending: \(error)")
             }
         }
-
     }
-
 }
 
-extension ColorService : MCNearbyServiceAdvertiserDelegate {
+class ColorServer : ColorRoot {
+    // Swift's two-phase initialization is a nice idea that is frequently stupid in practice
+    lazy private var serviceAdvertiser : MCNearbyServiceAdvertiser = {
+        return MCNearbyServiceAdvertiser(peer: myPeerId, discoveryInfo: nil, serviceType: ColorServiceType)
+    }()
+
+    override init() {
+        super.init()
+
+        self.serviceAdvertiser.delegate = self
+        self.serviceAdvertiser.startAdvertisingPeer()
+    }
+
+    deinit {
+        self.serviceAdvertiser.stopAdvertisingPeer()
+    }
+}
+
+class ColorClient : ColorRoot {
+    lazy private var serviceBrowser : MCNearbyServiceBrowser = {
+        return MCNearbyServiceBrowser(peer: myPeerId, serviceType: ColorServiceType)//MPServerService.SERVER_SERVICE_TYPE)
+    }()
+    
+    override init() {
+        super.init()
+
+        self.serviceBrowser.delegate = self
+        self.serviceBrowser.startBrowsingForPeers()
+    }
+
+    deinit {
+        self.serviceBrowser.stopBrowsingForPeers()
+    }
+}
+extension ColorServer : MCNearbyServiceAdvertiserDelegate {
 
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser, didNotStartAdvertisingPeer error: Error) {
         NSLog("%@", "didNotStartAdvertisingPeer: \(error)")
@@ -73,7 +87,7 @@ extension ColorService : MCNearbyServiceAdvertiserDelegate {
 
 }
 
-extension ColorService : MCNearbyServiceBrowserDelegate {
+extension ColorClient : MCNearbyServiceBrowserDelegate {
 
     func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
         NSLog("%@", "didNotStartBrowsingForPeers: \(error)")
@@ -91,7 +105,7 @@ extension ColorService : MCNearbyServiceBrowserDelegate {
 
 }
 
-extension ColorService : MCSessionDelegate {
+extension ColorRoot : MCSessionDelegate {
 
     func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
         NSLog("%@", "peer \(peerID) didChangeState: \(state.rawValue)")
